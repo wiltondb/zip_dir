@@ -1,0 +1,19 @@
+[package]
+name = "zip_dir"
+version = "1.0.0"
+authors = ["alex@wiltondb.com"]
+edition = "2018"
+license = "Apache-2.0"
+documentation = "https://docs.rs/zio_dir"
+repository = "https://github.com/wiltondb/zip_dir"
+readme = "README.md"
+categories = ["compression"]
+description = "Library that allows to unzip and zip directoried recursively"
+include = [
+    "src/*.rs",
+    "Cargo.toml",
+]
+
+[dependencies]
+chrono = "0.4"
+zip = { version = "0.6", default-features = false, features = ["deflate-zlib"] }
