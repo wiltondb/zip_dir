@@ -71,7 +71,7 @@ fn zip_test() {
     fs::create_dir(&stored_dir).unwrap();
     let stored_file = stored_dir.join("test.zip");
     let mut stored_entries = Vec::new();
-    zip_dir::zip_directory_listen(&orig_dir, &stored_file, 0, |en: &str| {
+    zip_recurse::zip_directory_listen(&orig_dir, &stored_file, 0, |en: &str| {
         stored_entries.push(en.to_string());
     }).unwrap();
     assert_eq!(expected_entries, stored_entries);
@@ -80,15 +80,15 @@ fn zip_test() {
     let deflated_dir = work_dir.join("deflated");
     fs::create_dir(&deflated_dir).unwrap();
     let deflated_file = deflated_dir.join("test.zip");
-    zip_dir::zip_directory(&orig_dir, &deflated_file, 6).unwrap();
+    zip_recurse::zip_directory(&orig_dir, &deflated_file, 6).unwrap();
 
     // unzip
     let stored_unzipped = stored_dir.join("unzipped");
-    let root_dir = zip_dir::unzip_directory(&stored_file, &stored_unzipped).unwrap();
+    let root_dir = zip_recurse::unzip_directory(&stored_file, &stored_unzipped).unwrap();
     assert_eq!("test/", root_dir);
     let deflated_unzipped = deflated_dir.join("unzipped");
     let mut deflated_entries = Vec::new();
-    zip_dir::unzip_directory_listen(&deflated_file, &deflated_unzipped, |en: &str| {
+    zip_recurse::unzip_directory_listen(&deflated_file, &deflated_unzipped, |en: &str| {
         deflated_entries.push(en.to_string());
     }).unwrap();
     assert_eq!(expected_entries, deflated_entries);

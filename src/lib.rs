@@ -135,6 +135,19 @@ fn zip_dir_recursive
     Ok(())
 }
 
+/// Compresses directory as a ZIP archive
+///
+/// Recursively compresses specified directory as a ZIP archive.
+/// DEFLATE compression is used if non-zero compression level is specified,
+/// STORE method is used otherwise.
+/// Listener is called for each entry added to archive.
+///
+/// # Arguments
+///
+/// * `src_dir` - Path to directory to compress
+/// * `dst_file` - Path to resulting ZIP file
+/// * `comp_level` - Compression level, `1 - 9` will enable DEFLATE, `0` will enable STORE
+/// * `listener` - Function that is called for each entry added to archive
 pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut (&str) -> ()>(src_dir: P, dst_file: P, comp_level: u8, mut listener: F) -> ZipResult<()> {
     let src_dir_path = src_dir.as_ref();
     if !src_dir_path.is_dir() {
@@ -149,10 +162,30 @@ pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut (&str) -> ()>(src_dir: P, d
     Ok(())
 }
 
+/// Compresses directory as a ZIP archive
+///
+/// Recursively compresses specified directory as a ZIP archive.
+/// DEFLATE compression is used if non-zero compression level is specified,
+/// STORE method is used otherwise.
+///
+/// # Arguments
+///
+/// * `src_dir` - Path to directory to compress
+/// * `dst_file` - Path to resulting ZIP file
+/// * `comp_level` - Compression level, `1 - 9` will enable DEFLATE, `0` will enable STORE
 pub fn zip_directory<P: AsRef<Path>>(src_dir: P, dst_file: P, comp_level: u8) -> ZipResult<()> {
     zip_directory_listen(src_dir, dst_file, comp_level, |_| {})
 }
 
+/// Unpack ZIP archive
+///
+/// Unpacks specified ZIP archive into a directory.
+///
+/// # Arguments
+///
+/// * `zip_file` - Path to ZIP file to unpack
+/// * `dest_dir` - Destination directory
+/// * `listener` - Function that is called for each entry read from archive
 pub fn unzip_directory_listen<P: AsRef<Path>, F: FnMut (&str) -> ()>(zip_file: P, dest_dir: P, mut listener: F) -> ZipResult<String> {
     let file = match File::open(zip_file) {
         Ok(file) => file,
@@ -184,6 +217,14 @@ pub fn unzip_directory_listen<P: AsRef<Path>, F: FnMut (&str) -> ()>(zip_file: P
     Ok(entry.name().to_string())
 }
 
+/// Unpack ZIP archive
+///
+/// Unpacks specified ZIP archive into a directory.
+///
+/// # Arguments
+///
+/// * `zip_file` - Path to ZIP file to unpack
+/// * `dest_dir` - Destination directory
 pub fn unzip_directory<P: AsRef<Path>>(zip_file: P, dest_dir: P) -> ZipResult<String> {
     unzip_directory_listen(zip_file, dest_dir, |_| {})
 }

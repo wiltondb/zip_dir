@@ -1,14 +1,14 @@
 [package]
-name = "zip_dir"
+name = "zip_recurse"
 version = "1.0.0"
 authors = ["alex@wiltondb.com"]
 edition = "2018"
 license = "Apache-2.0"
-documentation = "https://docs.rs/zio_dir"
-repository = "https://github.com/wiltondb/zip_dir"
+documentation = "https://docs.rs/zip_recurse"
+repository = "https://github.com/wiltondb/zip_recurse"
 readme = "README.md"
 categories = ["compression"]
-description = "Library that allows to unzip and zip directoried recursively"
+description = "Library that allows to ZIP directories recursively"
 include = [
     "src/*.rs",
     "Cargo.toml",
