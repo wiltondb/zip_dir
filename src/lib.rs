@@ -85,14 +85,17 @@ fn zip_file
     let meta = file.metadata()?;
     let system_time = meta.modified()?;
     let zip_time = time_to_zip_time(&system_time);
+    let zip64_flag = meta.len() >= (1<<32);
     let options = if comp_level > 0 {
         FileOptions::default()
             .compression_method(CompressionMethod::Deflated)
             .compression_level(Some(comp_level as i32))
+            .large_file(zip64_flag)
             .last_modified_time(zip_time)
     } else {
         FileOptions::default()
             .compression_method(CompressionMethod::Stored)
+            .large_file(zip64_flag)
             .last_modified_time(zip_time)
     };
     let rel_path = match root_dir.parent() {
