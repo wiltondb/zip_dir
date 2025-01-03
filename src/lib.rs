@@ -59,7 +59,7 @@ fn path_to_string(path: &Path) -> Result<String, io::Error> {
         None => {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Path access error"),
+                "Path access error".to_string(),
             ))
         }
     };
@@ -68,18 +68,16 @@ fn path_to_string(path: &Path) -> Result<String, io::Error> {
 }
 
 fn time_to_zip_time(system_time: &SystemTime) -> zip::DateTime {
-    let tm: chrono::DateTime<chrono::Utc> = system_time.clone().into();
-    match zip::DateTime::from_date_and_time(
+    let tm: chrono::DateTime<chrono::Utc> = (*system_time).into();
+    zip::DateTime::from_date_and_time(
         tm.year() as u16,
         tm.month() as u8,
         tm.day() as u8,
         tm.hour() as u8,
         tm.minute() as u8,
         tm.second() as u8,
-    ) {
-        Ok(zdt) => zdt,
-        Err(_) => zip::DateTime::default(),
-    }
+    )
+    .unwrap_or_default()
 }
 
 fn read_dir_paths(dir: &Path) -> Result<Vec<PathBuf>, io::Error> {
@@ -101,7 +99,7 @@ fn read_dir_paths(dir: &Path) -> Result<Vec<PathBuf>, io::Error> {
     Ok(res)
 }
 
-fn zip_file<T: io::Seek + io::Write, F: FnMut(&str) -> ()>(
+fn zip_file<T: io::Seek + io::Write, F: FnMut(&str)>(
     zip: &mut ZipWriter<T>,
     root_dir: &Path,
     path: &Path,
@@ -131,7 +129,7 @@ fn zip_file<T: io::Seek + io::Write, F: FnMut(&str) -> ()>(
     Ok(())
 }
 
-fn zip_dir_recursive<T: io::Seek + io::Write, F: FnMut(&str) -> ()>(
+fn zip_dir_recursive<T: io::Seek + io::Write, F: FnMut(&str)>(
     zip: &mut ZipWriter<T>,
     root_dir: &Path,
     dir: &Path,
@@ -173,7 +171,7 @@ fn zip_dir_recursive<T: io::Seek + io::Write, F: FnMut(&str) -> ()>(
 /// * `dst_file` - Path to resulting ZIP file
 /// * `comp_opts` - Compression method and level
 /// * `listener` - Function that is called for each entry added to archive
-pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut(&str) -> ()>(
+pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut(&str)>(
     src_dir: P,
     dst_file: P,
     comp_opts: CompressionOptions,
@@ -190,8 +188,8 @@ pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut(&str) -> ()>(
     let mut zip = zip::ZipWriter::new(BufWriter::new(zip_file));
     zip_dir_recursive(
         &mut zip,
-        &src_dir_path,
-        &src_dir_path,
+        src_dir_path,
+        src_dir_path,
         comp_opts,
         &mut listener,
     )?;
@@ -224,7 +222,7 @@ pub fn zip_directory<P: AsRef<Path>>(
 /// * `zip_file` - Path to ZIP file to unpack
 /// * `dest_dir` - Destination directory
 /// * `listener` - Function that is called for each entry read from archive
-pub fn unzip_directory_listen<P: AsRef<Path>, F: FnMut(&str) -> ()>(
+pub fn unzip_directory_listen<P: AsRef<Path>, F: FnMut(&str)>(
     zip_file: P,
     dest_dir: P,
     mut listener: F,
