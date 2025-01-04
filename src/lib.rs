@@ -23,40 +23,61 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use zip::CompressionMethod;
-use zip::result::ZipError;
-use zip::result::ZipResult;
-use zip::ZipWriter;
-use zip::write::FileOptions;
 use chrono::Datelike;
 use chrono::Timelike;
+use zip::result::ZipError;
+use zip::result::ZipResult;
+use zip::write::FileOptions;
+use zip::CompressionMethod;
+use zip::ZipWriter;
+
+/// Compression method & level according to [`zip::CompressionMethod`]
+/// and [`zip::write::FileOptions::compression_level`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompressionOptions {
+    pub method: CompressionMethod,
+    pub level: Option<i32>,
+}
 
 fn strip_prefix(parent: &Path, child: &Path) -> Result<PathBuf, io::Error> {
     match child.strip_prefix(parent) {
         Ok(rel_path) => Ok(rel_path.to_path_buf()),
-        Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!(
-            "Strip prefix error, path: {}, error: {}", child.to_str().unwrap_or(""), e)))
+        Err(e) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Strip prefix error, path: {}, error: {}",
+                child.to_str().unwrap_or(""),
+                e
+            ),
+        )),
     }
 }
 
 fn path_to_string(path: &Path) -> Result<String, io::Error> {
     let st = match path.to_str() {
         Some(name) => name.to_string(),
-        None => return Err(io::Error::new(io::ErrorKind::Other, format!(
-            "Path access error")))
+        None => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Path access error".to_string(),
+            ))
+        }
     };
     let res = st.replace("\\", "/");
     Ok(res)
 }
 
 fn time_to_zip_time(system_time: &SystemTime) -> zip::DateTime {
-    let tm: chrono::DateTime<chrono::Utc> = system_time.clone().into();
-    match zip::DateTime::from_date_and_time(
-        tm.year() as u16, tm.month() as u8, tm.day() as u8,
-        tm.hour() as u8, tm.minute() as u8, tm.second() as u8) {
-        Ok(zdt) => zdt,
-        Err(_) => zip::DateTime::default()
-    }
+    let tm: chrono::DateTime<chrono::Utc> = (*system_time).into();
+    zip::DateTime::from_date_and_time(
+        tm.year() as u16,
+        tm.month() as u8,
+        tm.day() as u8,
+        tm.hour() as u8,
+        tm.minute() as u8,
+        tm.second() as u8,
+    )
+    .unwrap_or_default()
 }
 
 fn read_dir_paths(dir: &Path) -> Result<Vec<PathBuf>, io::Error> {
@@ -78,29 +99,27 @@ fn read_dir_paths(dir: &Path) -> Result<Vec<PathBuf>, io::Error> {
     Ok(res)
 }
 
-fn zip_file
-<T: io::Seek + io::Write, F: FnMut (&str) -> ()>
-(zip: &mut ZipWriter<T>, root_dir: &Path, path: &Path, comp_level: u8, listener: &mut F) -> ZipResult<()> {
+fn zip_file<T: io::Seek + io::Write, F: FnMut(&str)>(
+    zip: &mut ZipWriter<T>,
+    root_dir: &Path,
+    path: &Path,
+    comp_opts: CompressionOptions,
+    listener: &mut F,
+) -> ZipResult<()> {
     let file = File::open(path)?;
     let meta = file.metadata()?;
     let system_time = meta.modified()?;
     let zip_time = time_to_zip_time(&system_time);
-    let zip64_flag = meta.len() >= (1<<32);
-    let options = if comp_level > 0 {
-        FileOptions::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(comp_level as i32))
-            .large_file(zip64_flag)
-            .last_modified_time(zip_time)
-    } else {
-        FileOptions::default()
-            .compression_method(CompressionMethod::Stored)
-            .large_file(zip64_flag)
-            .last_modified_time(zip_time)
-    };
+    let zip64_flag = meta.len() >= (1 << 32);
+    let options = FileOptions::default()
+        .compression_method(comp_opts.method)
+        .compression_level(comp_opts.level)
+        .large_file(zip64_flag)
+        .last_modified_time(zip_time);
+
     let rel_path = match root_dir.parent() {
         Some(parent) => strip_prefix(parent, path)?,
-        None => path.to_path_buf()
+        None => path.to_path_buf(),
     };
     let name = path_to_string(&rel_path)?;
     listener(&name);
@@ -110,29 +129,32 @@ fn zip_file
     Ok(())
 }
 
-fn zip_dir_recursive
-<T: io::Seek + io::Write, F: FnMut (&str) -> ()>
-(zip: &mut ZipWriter<T>, root_dir: &Path, dir: &Path, comp_level: u8, listener: &mut F) -> ZipResult<()> {
+fn zip_dir_recursive<T: io::Seek + io::Write, F: FnMut(&str)>(
+    zip: &mut ZipWriter<T>,
+    root_dir: &Path,
+    dir: &Path,
+    comp_opts: CompressionOptions,
+    listener: &mut F,
+) -> ZipResult<()> {
     if !dir.is_dir() {
         return Err(ZipError::FileNotFound);
     }
     let rel_path = match root_dir.parent() {
         Some(parent) => strip_prefix(parent, dir)?,
-        None => dir.to_path_buf()
+        None => dir.to_path_buf(),
     };
     let name = path_to_string(&rel_path)?;
     listener(&format!("{}/", &name));
     let medatata = dir.metadata()?;
     let system_time = medatata.modified()?;
     let zip_time = time_to_zip_time(&system_time);
-    let options = FileOptions::default()
-        .last_modified_time(zip_time);
+    let options = FileOptions::default().last_modified_time(zip_time);
     zip.add_directory(name, options)?;
     for path in read_dir_paths(dir)? {
         if path.is_dir() {
-            zip_dir_recursive(zip, root_dir, &path, comp_level, listener)?;
+            zip_dir_recursive(zip, root_dir, &path, comp_opts, listener)?;
         } else {
-            zip_file(zip, root_dir, &path, comp_level, listener)?;
+            zip_file(zip, root_dir, &path, comp_opts, listener)?;
         }
     }
     Ok(())
@@ -141,43 +163,54 @@ fn zip_dir_recursive
 /// Compresses directory as a ZIP archive
 ///
 /// Recursively compresses specified directory as a ZIP archive.
-/// DEFLATE compression is used if non-zero compression level is specified,
-/// STORE method is used otherwise.
 /// Listener is called for each entry added to archive.
 ///
 /// # Arguments
 ///
 /// * `src_dir` - Path to directory to compress
 /// * `dst_file` - Path to resulting ZIP file
-/// * `comp_level` - Compression level, `1 - 9` will enable DEFLATE, `0` will enable STORE
+/// * `comp_opts` - Compression method and level
 /// * `listener` - Function that is called for each entry added to archive
-pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut (&str) -> ()>(src_dir: P, dst_file: P, comp_level: u8, mut listener: F) -> ZipResult<()> {
+pub fn zip_directory_listen<P: AsRef<Path>, F: FnMut(&str)>(
+    src_dir: P,
+    dst_file: P,
+    comp_opts: CompressionOptions,
+    mut listener: F,
+) -> ZipResult<()> {
     let src_dir_path = src_dir.as_ref();
     if !src_dir_path.is_dir() {
         return Err(ZipError::FileNotFound);
     }
     let zip_file = match File::create(dst_file.as_ref()) {
         Ok(file) => file,
-        Err(e) => return Err(ZipError::Io(e))
+        Err(e) => return Err(ZipError::Io(e)),
     };
     let mut zip = zip::ZipWriter::new(BufWriter::new(zip_file));
-    zip_dir_recursive(&mut zip, &src_dir_path, &src_dir_path, comp_level, &mut listener)?;
+    zip_dir_recursive(
+        &mut zip,
+        src_dir_path,
+        src_dir_path,
+        comp_opts,
+        &mut listener,
+    )?;
     Ok(())
 }
 
 /// Compresses directory as a ZIP archive
 ///
 /// Recursively compresses specified directory as a ZIP archive.
-/// DEFLATE compression is used if non-zero compression level is specified,
-/// STORE method is used otherwise.
 ///
 /// # Arguments
 ///
 /// * `src_dir` - Path to directory to compress
 /// * `dst_file` - Path to resulting ZIP file
-/// * `comp_level` - Compression level, `1 - 9` will enable DEFLATE, `0` will enable STORE
-pub fn zip_directory<P: AsRef<Path>>(src_dir: P, dst_file: P, comp_level: u8) -> ZipResult<()> {
-    zip_directory_listen(src_dir, dst_file, comp_level, |_| {})
+/// * `comp_opts` - Compression method and level
+pub fn zip_directory<P: AsRef<Path>>(
+    src_dir: P,
+    dst_file: P,
+    comp_opts: CompressionOptions,
+) -> ZipResult<()> {
+    zip_directory_listen(src_dir, dst_file, comp_opts, |_| {})
 }
 
 /// Unpack ZIP archive
@@ -189,10 +222,14 @@ pub fn zip_directory<P: AsRef<Path>>(src_dir: P, dst_file: P, comp_level: u8) ->
 /// * `zip_file` - Path to ZIP file to unpack
 /// * `dest_dir` - Destination directory
 /// * `listener` - Function that is called for each entry read from archive
-pub fn unzip_directory_listen<P: AsRef<Path>, F: FnMut (&str) -> ()>(zip_file: P, dest_dir: P, mut listener: F) -> ZipResult<String> {
+pub fn unzip_directory_listen<P: AsRef<Path>, F: FnMut(&str)>(
+    zip_file: P,
+    dest_dir: P,
+    mut listener: F,
+) -> ZipResult<String> {
     let file = match File::open(zip_file) {
         Ok(file) => file,
-        Err(e) => return Err(ZipError::Io(e))
+        Err(e) => return Err(ZipError::Io(e)),
     };
     let mut zip = zip::ZipArchive::new(BufReader::new(file))?;
     for i in 0..zip.len() {

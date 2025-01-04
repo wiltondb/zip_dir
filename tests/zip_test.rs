@@ -18,6 +18,8 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+use zip_recurse::CompressionOptions;
+
 fn read_dir(dir: &Path) -> Vec<String> {
     let rd = fs::read_dir(dir).unwrap();
     let mut paths: Vec<PathBuf> = Vec::new();
@@ -34,9 +36,10 @@ fn read_dir(dir: &Path) -> Vec<String> {
             a.cmp(b)
         }
     });
-    let res = paths.iter().map(|p| {
-        p.file_name().unwrap().to_string_lossy().to_string()
-    }).collect();
+    let res = paths
+        .iter()
+        .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+        .collect();
 
     res
 }
@@ -58,29 +61,38 @@ fn zip_test() {
     fs::create_dir(orig_baz_dir.as_path()).unwrap();
     fs::write(orig_baz_dir.join("boo.txt"), "boo").unwrap();
 
-    let expected_entries = vec!(
+    let expected_entries = vec![
         "test/",
         "test/baz/",
         "test/baz/boo.txt",
         "test/bar.txt",
         "test/foo.txt",
-    );
+    ];
 
     // store
     let stored_dir = work_dir.join("stored");
     fs::create_dir(&stored_dir).unwrap();
     let stored_file = stored_dir.join("test.zip");
     let mut stored_entries = Vec::new();
-    zip_recurse::zip_directory_listen(&orig_dir, &stored_file, 0, |en: &str| {
+    let comp_opts_stored = CompressionOptions {
+        level: None,
+        method: zip::CompressionMethod::Stored,
+    };
+    zip_recurse::zip_directory_listen(&orig_dir, &stored_file, comp_opts_stored, |en: &str| {
         stored_entries.push(en.to_string());
-    }).unwrap();
+    })
+    .unwrap();
     assert_eq!(expected_entries, stored_entries);
 
     // deflate
     let deflated_dir = work_dir.join("deflated");
     fs::create_dir(&deflated_dir).unwrap();
     let deflated_file = deflated_dir.join("test.zip");
-    zip_recurse::zip_directory(&orig_dir, &deflated_file, 6).unwrap();
+    let comp_opts_defl = CompressionOptions {
+        level: Some(6),
+        method: zip::CompressionMethod::Deflated,
+    };
+    zip_recurse::zip_directory(&orig_dir, &deflated_file, comp_opts_defl).unwrap();
 
     // unzip
     let stored_unzipped = stored_dir.join("unzipped");
@@ -90,14 +102,24 @@ fn zip_test() {
     let mut deflated_entries = Vec::new();
     zip_recurse::unzip_directory_listen(&deflated_file, &deflated_unzipped, |en: &str| {
         deflated_entries.push(en.to_string());
-    }).unwrap();
+    })
+    .unwrap();
     assert_eq!(expected_entries, deflated_entries);
 
-    assert_eq!(vec!("baz", "bar.txt", "foo.txt"), read_dir(&stored_unzipped.join("test")));
-    assert_eq!(vec!("boo.txt"), read_dir(&stored_unzipped.join("test").join("baz")));
+    assert_eq!(
+        vec!("baz", "bar.txt", "foo.txt"),
+        read_dir(&stored_unzipped.join("test"))
+    );
+    assert_eq!(
+        vec!("boo.txt"),
+        read_dir(&stored_unzipped.join("test").join("baz"))
+    );
 
     let du_root = deflated_unzipped.join("test");
     assert_eq!(fs::read_to_string(du_root.join("foo.txt")).unwrap(), "foo");
     assert_eq!(fs::read_to_string(du_root.join("bar.txt")).unwrap(), "bar");
-    assert_eq!(fs::read_to_string(du_root.join("baz").join("boo.txt")).unwrap(), "boo");
+    assert_eq!(
+        fs::read_to_string(du_root.join("baz").join("boo.txt")).unwrap(),
+        "boo"
+    );
 }
